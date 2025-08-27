@@ -13,6 +13,8 @@ DB_LOGIN = f"""host={os.environ.get('DB_HOST')}
 
 REQUEST_URL = os.environ.get('AUTH_URL')
 BASE_PATH = os.environ.get('BASE_PATH')
+MODE = os.environ.get('MODE', 'production')
+PORT = os.environ.get('PORT', 5000)
 
 if not REQUEST_URL:
     raise ValueError("AUTH_URL is not set in environment variables")
