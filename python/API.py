@@ -34,7 +34,7 @@ def authenticate():
     f.g.user = user
 
 @app.route(f'{BASE_PATH}/', methods=['GET'])
-def heartbeat():    
+def heartbeat():
     return "Authenticated", 200
 
 @app.route(f'{BASE_PATH}/upload', methods=['POST'])

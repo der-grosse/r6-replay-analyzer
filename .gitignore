@@ -210,3 +210,5 @@ __marimo__/
 # replays for testing
 data
 local_test
+~$*.xlsx
+~$*.xls
