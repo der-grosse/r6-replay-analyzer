@@ -133,7 +133,7 @@ def initialize_db():
                             target_player_id INTEGER,
                             type VARCHAR(255),
                             phase VARCHAR(255),
-                            time_seconds INTEGER,
+                            time_elapsed_seconds INTEGER,
                             operator VARCHAR(255),
                             refrag BOOLEAN,
                             FOREIGN KEY (round_id) REFERENCES Rounds(id),
