@@ -34,6 +34,7 @@ def initialize_db():
                              game_version VARCHAR(255),
                              team_id INTEGER,
                              winner_team_index INTEGER,
+                             team0_starting_side VARCHAR(255),
                              FOREIGN KEY (player_id) REFERENCES Player(id)
                         );"""
     success, error = execute_query(query_matches_table)
