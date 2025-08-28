@@ -119,6 +119,7 @@ def initialize():
                                   ok BOOLEAN,
                                   od BOOLEAN,
                                   win BOOLEAN,
+                                  atk BOOLEAN,
                                   refrags INTEGER,
                                   got_refraged BOOLEAN,
                                   FOREIGN KEY (player_id) REFERENCES Player(id),
