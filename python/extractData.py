@@ -1,3 +1,5 @@
+from mapFunctions import map_maps
+
 global REFRAGTIME
 REFRAGTIME = 7  # seconds
 
@@ -7,7 +9,7 @@ def correct_data(data: dict) -> dict:
     # Check if last round(s) are valid
     keep_index = len(data["rounds"])
     for i, round in enumerate(reversed(data["rounds"])):
-        if len(round["stats"]) < 7:
+        if len(round["stats"]) < 1:
             keep_index -= 1
         else:
             break
@@ -45,7 +47,8 @@ def extract_match_data(data: dict) -> dict:
     # Extract the date, time, and offset from the timestamp and add offset to time
     TIMESTAMP = extract_time_stamp(data)
     GAMEMODE = match_info["Game Mode"]
-    MAP = data["rounds"][0]["map"]["name"]
+    map_id = data["rounds"][0]["map"]["id"]
+    MAP = map_maps(map_id)
     MATCHTYPE = match_info["Match Type"]
     GAMEVERSION = match_info["Version"]
     # Extract winner Team index
@@ -175,8 +178,6 @@ def extract_events_data(data: dict, player_data: dict) -> list[dict]:
                            "refrag": REFRAG,
                            "operator": OPERATOR
                            })
-            print("appended")
-            print(len(events))
     return events
 
 if __name__ == "__main__":
@@ -184,7 +185,7 @@ if __name__ == "__main__":
     from time import perf_counter as pc
     from pathlib import Path
 
-    match_name = "Match-2025-08-24_18-44-24-42712"
+    match_name = "Match-2025-08-28_23-48-41-24480"
     with open(Path(__file__).parent.parent / "data" / "json" / f"{match_name}.json", "r") as f:
         data = load(f)
     
@@ -200,5 +201,5 @@ if __name__ == "__main__":
             for i, v1 in enumerate(value):
                 if v1["refrag"]:
                     print(f"  Refrag:")
-                    print(f"    {value[i-1]}")
+                    print(f"    {value[i-2]}")
                     print(f"    {v1}")
