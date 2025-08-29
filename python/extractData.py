@@ -171,6 +171,7 @@ def extract_rounds_data(data: dict, events_data: dict) -> list[dict]:
                             "clutch":CLUTCH,
                             "win_condition":WINCONDITION,
                             })
+    print(rounds_data)
     return rounds_data
 
 def extract_player_rounds_data(data: dict) -> list[dict]:
@@ -181,6 +182,7 @@ def extract_player_match_data(data: dict) -> list[dict]:
 
 def extract_events_data(data: dict, player_data: dict) -> list[dict]:
     events = []
+    counter = 0
     for i, round in enumerate(data["rounds"]):
         ROUNDNUMBER = i + 1
         # Give each event a phase
@@ -242,7 +244,12 @@ def extract_events_data(data: dict, player_data: dict) -> list[dict]:
                                 time_diff = TIMEELAPSEDSECONDS - past_event_time
                                 if time_diff <= REFRAGTIME and time_diff >= 0:
                                     REFRAG = True
-                                    print(f"REFRAG: diff {time_diff}\n  1st {past_event_time} {earlier_event['phase']}\n  2nd {TIMEELAPSEDSECONDS} {event['phase']}")
+
+                                    first_death_player_name = earlier_event["target_player_ubisoft_id"]
+                                    first_death_player_name = player_data[first_death_player_name]["username"]
+                                    refrag_player_name = event["username"]
+                                    print(f"Refrag found in round {ROUNDNUMBER}: {first_death_player_name} got Refragged by {refrag_player_name} with time diff {time_diff}")
+                                    counter += 1
                                     break
                                 elif time_diff < 0:
                                     # Events are out of order, stop looking
@@ -254,7 +261,11 @@ def extract_events_data(data: dict, player_data: dict) -> list[dict]:
                                     time_diff = (round_duration - past_event_time) + TIMEELAPSEDSECONDS
                                     if time_diff <= REFRAGTIME:
                                         REFRAG = True
-                                        print(f"REFRAG: diff {time_diff}\n  1st {past_event_time} {earlier_event['phase']}\n  2nd {TIMEELAPSEDSECONDS} {event['phase']} planttime:{plant_time}")
+                                        first_death_player_name = earlier_event["target_player_ubisoft_id"]
+                                        first_death_player_name = player_data[first_death_player_name]["username"]
+                                        refrag_player_name = event["username"]
+                                        print(f"Refrag found in round {ROUNDNUMBER}: {first_death_player_name} got Refragged by {refrag_player_name} with time diff {time_diff}")
+                                        counter += 1
                                         break
                             # If we've gone too far back in time, stop searching
                             elif earlier_event["phase"] != event["phase"]:
@@ -270,6 +281,7 @@ def extract_events_data(data: dict, player_data: dict) -> list[dict]:
                            "refrag": REFRAG,
                            "operator": OPERATOR
                            })
+    print(f"Total refrags found: {counter}")
     return events
 
 if __name__ == "__main__":
@@ -277,7 +289,7 @@ if __name__ == "__main__":
     from time import perf_counter as pc
     from pathlib import Path
 
-    match_name = "Match-2025-07-17_20-54-09-3448"
+    match_name = "Match-2025-08-29_22-44-56-17324"
     with open(Path(__file__).parent.parent / "data" / "json" / f"{match_name}.json", "r") as f:
         data = load(f)
     
