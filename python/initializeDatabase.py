@@ -135,7 +135,7 @@ def initialize_db():
                             time_elapsed_seconds INTEGER,
                             operator VARCHAR(255),
                             refrag BOOLEAN,
-                            was_refrag BOOLEAN,
+                            got_refragt BOOLEAN,
                             FOREIGN KEY (round_id) REFERENCES Rounds(id),
                             FOREIGN KEY (player_id) REFERENCES Player(id),
                             FOREIGN KEY (target_player_id) REFERENCES Player(id)
