@@ -40,10 +40,10 @@ def extract_data(data: dict) -> dict["match_data": dict, "player_data": dict,
     data = correct_data(data)
     match_data = extract_match_data(data)
     player_data = extract_player_data(data)
-    player_rounds_data = extract_player_rounds_data(data)
     player_match_data = extract_player_match_data(data)
     events_data = extract_events_data(data, player_data)
     rounds_data = extract_rounds_data(data, events_data)
+    player_rounds_data = extract_player_rounds_data(data, events_data, player_data)
     return {"match_data": match_data, "player_data": player_data, "rounds_data": rounds_data, "player_rounds_data": player_rounds_data, "player_match_data": player_match_data, "events_data": events_data}
 
 def extract_match_data(data: dict) -> dict:
@@ -138,8 +138,23 @@ def extract_rounds_data(data: dict, events_data: dict) -> list[dict]:
                     if WINNERTEAMINDEX == 1:
                         CLUTCH = True
                         clutch_situation = True
-            elif event["type"] == "Kill" and event["target_player_ubisoft_id"] in team1_player_count:
-                team1_player_count.remove(event["target_player_ubisoft_id"])
+            
+            if event["type"] == "Death" and event["player_ubisoft_id"] in team0_player_count:
+                if OKTEAMINDEX is None: # FLORIN FRAGEN
+                    OKTEAMINDEX = 1
+                team0_player_count.remove(event["player_ubisoft_id"])
+                if len(team0_player_count) == 1 and clutch_situation is None:
+                    if WINNERTEAMINDEX == 0:
+                        CLUTCH = True
+                        clutch_situation = True
+            if event["type"] == "Death" and event["player_ubisoft_id"] in team1_player_count:
+                if OKTEAMINDEX is None: # FLORIN FRAGEN
+                    OKTEAMINDEX = 0
+                team1_player_count.remove(event["player_ubisoft_id"])
+                if len(team1_player_count) == 1 and clutch_situation is None:
+                    if WINNERTEAMINDEX == 1:
+                        CLUTCH = True
+                        clutch_situation = True
 
             # WINCONDITION
             if event["type"] == "DefuserPlantComplete":
@@ -174,8 +189,105 @@ def extract_rounds_data(data: dict, events_data: dict) -> list[dict]:
     print(rounds_data)
     return rounds_data
 
-def extract_player_rounds_data(data: dict) -> list[dict]:
-    pass
+def extract_player_rounds_data(data: dict, events_data: list, player_data: dict) -> list[dict]:
+    player_rounds_list = []
+    for i, round in enumerate(data["rounds"]):
+        round_dict = {}
+        # helper
+        first_kill_id = None
+        first_death_id = None
+        for player in round["players"]:
+            #helper
+            team0_player_count = [p["profileID"] for p in round["players"] if p["teamIndex"] == 0]
+            team1_player_count = [p["profileID"] for p in round["players"] if p["teamIndex"] == 1]
+            # player id
+            PLAYERUBISOFTID = player.get("profileID")
+            # round number
+            ROUNDNUMBER = i + 1
+            # operator
+            try:
+                OPERATOR = player["operator"]["name"] if player["operator"].get("name") else player["operator"]["id"] if player["operator"].get("id") else None
+            except KeyError:
+                OPERATOR = None
+            # team index
+            TEAMINDEX = player.get("teamIndex")
+            # spawn
+            SPAWN = player.get("spawn")
+            # win
+            WIN = round["teams"][TEAMINDEX]["won"]
+            # atk or def
+            ATK = True if round["teams"][TEAMINDEX]["role"] == "Attack" else False
+            # Iterativ Stats
+            KILLS = 0
+            DEATH = False
+            HEADSHOTS = 0
+            ONEVX = None
+            PLANT = False
+            DEFUSE = False
+            OK = False
+            OD = False
+            REFRAGS = 0
+            GOTREFRAGT = False
+            for event in events_data:
+                if event["round_number"] != ROUNDNUMBER:
+                    continue
+                if first_kill_id is None and first_death_id is None and event["type"] == "Kill":
+                    first_kill_id = event["player_ubisoft_id"]
+                if first_death_id is None and event["type"] == "Kill":
+                    first_death_id = event["target_player_ubisoft_id"]
+                if first_death_id is None and event["type"] == "Death":
+                    first_death_id = event["player_ubisoft_id"]
+                if PLAYERUBISOFTID == first_kill_id:
+                    OK = True
+                if PLAYERUBISOFTID == first_death_id:
+                    OD = True
+
+                if event["type"] == "Kill":
+                    team0_player_count.remove(event["target_player_ubisoft_id"]) if event["target_player_ubisoft_id"] in team0_player_count else None
+                    team1_player_count.remove(event["target_player_ubisoft_id"]) if event["target_player_ubisoft_id"] in team1_player_count else None
+                    if event["player_ubisoft_id"] == PLAYERUBISOFTID:
+                        KILLS += 1
+                        if event["headshot"]:
+                            HEADSHOTS += 1
+                        if event["refrag"]:
+                            REFRAGS += 1
+                    elif event["target_player_ubisoft_id"] == PLAYERUBISOFTID:
+                        DEATH = True
+                        if event["was_refragt"]:
+                            GOTREFRAGT = True
+                
+                elif event["type"] == "Death":
+                    team0_player_count.remove(event["player_ubisoft_id"]) if event["player_ubisoft_id"] in team0_player_count else None
+                    team1_player_count.remove(event["player_ubisoft_id"]) if event["player_ubisoft_id"] in team1_player_count else None
+                    if event["player_ubisoft_id"] == PLAYERUBISOFTID:
+                        DEATH = True
+                if TEAMINDEX == 0 and ONEVX is None and len(team0_player_count) == 1 and PLAYERUBISOFTID in team0_player_count:
+                    ONEVX = len(team1_player_count)
+                elif TEAMINDEX == 1 and ONEVX is None and len(team1_player_count) == 1 and PLAYERUBISOFTID in team1_player_count:
+                    ONEVX = len(team0_player_count)
+                if event["type"] == "DefuserPlantComplete" and event["player_ubisoft_id"] == PLAYERUBISOFTID:
+                    PLANT = True
+                if event["type"] == "DefuserDisableComplete" and event["player_ubisoft_id"] == PLAYERUBISOFTID:
+                    DEFUSE = True
+            round_dict[PLAYERUBISOFTID] = {
+                "round": ROUNDNUMBER,
+                "operator": OPERATOR,
+                "spawn": SPAWN,
+                "win": WIN,
+                "atk": ATK,
+                "kills": KILLS,
+                "death": DEATH,
+                "headshots": HEADSHOTS,
+                "onevx": ONEVX,
+                "plant": PLANT,
+                "defuse": DEFUSE,
+                "ok": OK,
+                "od": OD,
+                "refrags": REFRAGS,
+                "got_refragt": GOTREFRAGT,
+            }
+        player_rounds_list.append(round_dict)
+    return player_rounds_list
 
 def extract_player_match_data(data: dict) -> list[dict]:
     pass
@@ -230,6 +342,7 @@ def extract_events_data(data: dict, player_data: dict) -> list[dict]:
                     start_time = plant_duration
             event_time = event["timeInSeconds"]
             TIMEELAPSEDSECONDS = start_time - event_time if start_time - event_time >= 0 else 0
+            HEADSHOT = event.get("headshot", False)
             # Refrag True if Killer dies within X seconds
             REFRAG = False
             if TYPE == "Kill":
@@ -244,12 +357,7 @@ def extract_events_data(data: dict, player_data: dict) -> list[dict]:
                                 time_diff = TIMEELAPSEDSECONDS - past_event_time
                                 if time_diff <= REFRAGTIME and time_diff >= 0:
                                     REFRAG = True
-
-                                    first_death_player_name = earlier_event["target_player_ubisoft_id"]
-                                    first_death_player_name = player_data[first_death_player_name]["username"]
-                                    refrag_player_name = event["username"]
-                                    print(f"Refrag found in round {ROUNDNUMBER}: {first_death_player_name} got Refragged by {refrag_player_name} with time diff {time_diff}")
-                                    counter += 1
+                                    events[events.index(earlier_event)]["was_refragt"] = True
                                     break
                                 elif time_diff < 0:
                                     # Events are out of order, stop looking
@@ -261,11 +369,7 @@ def extract_events_data(data: dict, player_data: dict) -> list[dict]:
                                     time_diff = (round_duration - past_event_time) + TIMEELAPSEDSECONDS
                                     if time_diff <= REFRAGTIME:
                                         REFRAG = True
-                                        first_death_player_name = earlier_event["target_player_ubisoft_id"]
-                                        first_death_player_name = player_data[first_death_player_name]["username"]
-                                        refrag_player_name = event["username"]
-                                        print(f"Refrag found in round {ROUNDNUMBER}: {first_death_player_name} got Refragged by {refrag_player_name} with time diff {time_diff}")
-                                        counter += 1
+                                        events[events.index(earlier_event)]["was_refragt"] = True
                                         break
                             # If we've gone too far back in time, stop searching
                             elif earlier_event["phase"] != event["phase"]:
@@ -279,8 +383,11 @@ def extract_events_data(data: dict, player_data: dict) -> list[dict]:
                            "phase": PHASE,
                            "time_elapsed_seconds": TIMEELAPSEDSECONDS,
                            "refrag": REFRAG,
-                           "operator": OPERATOR
+                           "operator": OPERATOR,
+                           "was_refragt": False,
+                           "headshot": HEADSHOT
                            })
+            
     print(f"Total refrags found: {counter}")
     return events
 
@@ -296,6 +403,11 @@ if __name__ == "__main__":
     start = pc()
     r_counter = 0
     extracted_data = extract_data(data)
+    for i, round in enumerate(extracted_data["player_rounds_data"]):
+        print(f"Round {i + 1}/{round[list(round.keys())[0]]['round']}:")
+        for player, value in round.items():
+            print(f" Player: {player}\n  {value}")
+        print("\n")
     # print(f"Extraction took {pc() - start:.2f} seconds")
     # for key, value in extracted_data.items():
     #     print(f"{key}: {type(value)} with {len(value.items()) if isinstance(value, dict) else '1'} entries")
