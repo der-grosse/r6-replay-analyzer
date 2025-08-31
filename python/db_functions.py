@@ -1,7 +1,8 @@
 ##### Datenbank-Abfragen
-import re
+from time import perf_counter as pc
 from numpy import rec
 import psycopg2
+from requests import get
 from vars import DB_LOGIN, PORT, BASE_PATH
 import logging
 import flask as f
@@ -30,6 +31,8 @@ def execute_query(query, params=None):
         return False, str(e)
     
 def save_match(data: dict, team_id: int) -> None:
+    start_all = pc()
+    start = pc()
     success, error = execute_query("BEGIN TRANSACTION;")
     if error:
         logging.error(f"Database error during initialization [BEGIN TRANSACTION]: {error}")
@@ -42,20 +45,24 @@ def save_match(data: dict, team_id: int) -> None:
     result, error = fetch_data(query, ['match_id'], params)
     if error:
         logging.error(f"Database error during match existence check: {error}")
+        execute_query("ROLLBACK;")
         f.abort(500, description="Internal Server Error")
 
     if result:  # Wenn Liste nicht leer ist
-        logging.info(f"Match {match_id} already exists with ID {result[0]['id']}.")
-        data["match_info"]["match.id"] = result[0]['id']
+        logging.info(f"Match {match_id} already exists with ID {result[0]['match_id']}.")
+        data["match_data"]["match.id"] = result[0]['match_id']
         f.abort(409, description="Conflict: Match already exists.")
     else:  # Wenn Liste leer ist (Match existiert nicht)
         logging.info(f"Match {match_id} does not exist yet.")
+        execute_query("ROLLBACK;")
+    print(f"Check if match exists took {pc() - start:.2f} seconds.")
     # endregion
 
-    # region Save Player Data
+    # region Save Player
+    start = pc()
     for ubisoft_id, player_data in data["player_data"].items():
         query = """
-            INSERT INTO Player (ubisoft_id, username, timestamp, team_id)
+            INSERT INTO player (ubisoft_id, username, timestamp, team_id)
             VALUES (%s, %s, %s, %s)
             ON CONFLICT (ubisoft_id, username, team_id) 
             DO UPDATE SET 
@@ -76,21 +83,25 @@ def save_match(data: dict, team_id: int) -> None:
         result, error = fetch_data(query, ['id'], params)
         if error:
             logging.error(f"Database error during player insert/update: {error}")
+            execute_query("ROLLBACK;")
             f.abort(500, description="Internal Server Error")
-        print(result)
+
         player_id = result[0]['id'] if result else None
         
         if not player_id:
             logging.error(f"Failed to retrieve player ID after insert/update for Ubisoft ID {player_data.get('ubisoft_id')}")
+            execute_query("ROLLBACK;")
             f.abort(500, description="Internal Server Error")
         else:
             data["player_data"][ubisoft_id]["player.id"] = player_id
+    print(f"Save Player took {pc() - start:.2f} seconds.")
     # endregion
 
-    # region Save Match Data
+    # region Save Match
+    start = pc()
     match_info = data["match_data"]
     query = """
-    INSERT INTO Matches (match_id, player_id, timestamp, game_mode, map, match_type,
+    INSERT INTO matches (match_id, player_id, timestamp, game_mode, map, match_type,
     game_version, team_id, winner_team_index, team0_starting_side, prep_duration,
     round_duration, plant_duration)
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -120,19 +131,199 @@ def save_match(data: dict, team_id: int) -> None:
 
     if error:
         logging.error(f"Database error during match insert/update: {error}")
+        execute_query("ROLLBACK;")
         f.abort(500, description="Internal Server Error")
 
     else:
-        r_match_id = result[0]['match_id']
-        print("Return:", r_match_id)
-        print("vorher:", match_info.get("match_id"))
-
+        match_id = result[0]['match_id']
+    print(f"Save Match took {pc() - start:.2f} seconds.")
     # endregion
-        
+    
+    # region Save rounds
+    start = pc()
+    rounds_data = data["rounds_data"]
+    for i, round_data in enumerate(rounds_data):
+        query = """INSERT INTO rounds (match_id, round_number, site, winner_team_index, time_to_entry,
+        atk_team_index, def_team_index, ok_team_index, ok_refrag, clutch, win_condition)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id;
+        """
+
+        params = (
+            round_data.get("match_id"),
+            round_data.get("round_number"),
+            round_data.get("site"),
+            round_data.get("winner_team_index"),
+            round_data.get("time_to_entry"),
+            round_data.get("atk_team_index"),
+            round_data.get("def_team_index"),
+            round_data.get("ok_team_index"),
+            round_data.get("ok_refrag"),
+            round_data.get("clutch"),
+            round_data.get("win_condition"),
+        )
+
+        result, error = fetch_data(query, ['id'], params)
+        if error:
+            logging.error(f"Database error during round insert/update: {error}")
+            execute_query("ROLLBACK;")
+            f.abort(500, description="Internal Server Error")
+
+        round_id = result[0]['id'] if result else None
+        if not round_id:
+            logging.error(f"Failed to retrieve round ID after insert/update for match ID {round_data.get('match_id')}")
+            execute_query("ROLLBACK;")
+            f.abort(500, description="Internal Server Error")
+
+        rounds_data[i]["round.id"] = round_id
+    print(f"Save rounds took {pc() - start:.2f} seconds.")
+    # endregion
+
+    # region Save playerRound
+    start = pc()
+    player_round_data = data["player_rounds_data"]
+    for round_dict in player_round_data:
+        for ubisoft_id, dic in round_dict.items():
+            query = """
+            INSERT INTO playerround (player_id, round_id, team_index, operator, spawn, kills, death,
+            headshots, plant, defuse, kostpoint, onevx, ok, od, win, atk, refrags, got_refraged)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id;
+            """
+
+            round_number = round_data.get("round_number")
+            roundID = rounds_data[round_number - 1]["round.id"]
+            params = (
+                data["player_data"][ubisoft_id]["player.id"],
+                roundID,
+                dic.get("team_index"),
+                dic.get("operator"),
+                dic.get("spawn"),
+                dic.get("kills"),
+                dic.get("death"),
+                dic.get("headshots"),
+                dic.get("plant"),
+                dic.get("defuse"),
+                dic.get("kostpoint"),
+                dic.get("onevx"),
+                dic.get("ok"),
+                dic.get("od"),
+                dic.get("win"),
+                dic.get("atk"),
+                dic.get("refrags"),
+                dic.get("got_refraged")
+            )
+
+            result, error = fetch_data(query, ['id'], params)
+            if error:
+                logging.error(f"Database error during playerRound insert/update: {error}")
+                execute_query("ROLLBACK;")
+                f.abort(500, description="Internal Server Error")
+
+            player_round_id = result[0]['id'] if result else None
+            if not player_round_id:
+                logging.error(f"Failed to retrieve playerRound ID after insert/update for round ID {roundID}")
+                execute_query("ROLLBACK;")
+                f.abort(500, description="Internal Server Error")
+    print(f"Save playerRound took {pc() - start:.2f} seconds.")
+    # endregion
+
+    # region Save playerMatch
+    start = pc()
+    player_match_data = data["player_match_data"]
+    for ubisoft_id, dic in player_match_data.items():
+        query = """
+        INSERT INTO playermatch (player_id, match_id, team_index, kills, assists, deaths,
+        headshots, kost, win, won_rounds, lost_rounds, won_atk_rounds, lost_atk_rounds,
+        won_def_rounds, lost_def_rounds, oks, oks_atk, ods, ods_atk, refrags, got_refraged)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id;
+        """
+
+        params = (
+            data["player_data"][ubisoft_id]["player.id"],
+            dic.get("match_id"),
+            dic.get("team_index"),
+            dic.get("kills"),
+            dic.get("assists"),
+            dic.get("deaths"),
+            dic.get("headshots"),
+            dic.get("kost"),
+            dic.get("win_match"),
+            dic.get("won_rounds"),
+            dic.get("lost_rounds"),
+            dic.get("atk_won_rounds"),
+            dic.get("atk_lost_rounds"),
+            dic.get("def_won_rounds"),
+            dic.get("def_lost_rounds"),
+            dic.get("oks"),
+            dic.get("oks_atk"),
+            dic.get("ods"),
+            dic.get("ods_atk"),
+            dic.get("refrags"),
+            dic.get("got_refraged")
+        )
+    
+        result, error = fetch_data(query, ['id'], params)
+        if error:
+            logging.error(f"Database error during playerMatch insert/update: {error}")
+            execute_query("ROLLBACK;")
+            f.abort(500, description="Internal Server Error")
+
+        player_match_id = result[0]['id'] if result else None
+        if not player_match_id:
+            logging.error(f"Failed to retrieve playerMatch ID after insert/update for player ID {ubisoft_id}")
+            execute_query("ROLLBACK;")
+            f.abort(500, description="Internal Server Error")
+    print(f"Save playerMatch took {pc() - start:.2f} seconds.")
+    # endregion
+
+    # region Save Events
+    start = pc()
+    for event in data["events_data"]:
+        query = """
+        INSERT INTO events (round_id, player_id, target_player_id, type, phase, time_elapsed_seconds,
+        operator, refrag, got_refraged, headshot)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id;
+        """
+
+        round_number = event["round_number"]
+        roundID = rounds_data[round_number - 1]["round.id"]
+        player_ubisoft_id = event["player_ubisoft_id"]
+        target_ubisoft_id = event["target_player_ubisoft_id"]
+        params = (
+            roundID,
+            data["player_data"][player_ubisoft_id]["player.id"],
+            data["player_data"][target_ubisoft_id]["player.id"] if target_ubisoft_id else None,
+            event["type"],
+            event["phase"],
+            event["time_elapsed_seconds"],
+            event["operator"],
+            event["refrag"],
+            event["was_refraged"],
+            event["headshot"]
+        )
+
+        result, error = fetch_data(query, ['id'], params)
+        if error:
+            logging.error(f"Database error during events insert/update: {error}")
+            execute_query("ROLLBACK;")
+            f.abort(500, description="Internal Server Error")
+
+        event_id = result[0]['id'] if result else None
+        if not event_id:
+            logging.error(f"Failed to retrieve event ID after insert/update for round ID {roundID}")
+            execute_query("ROLLBACK;")
+            f.abort(500, description="Internal Server Error")
+    print(f"Save Events took {pc() - start:.2f} seconds.")
+    # endregion
+
     # Commit if successful
     success, error = execute_query("COMMIT;")
     if error:
         logging.error(f"Database error during initialization [COMMIT]: {error}")
         execute_query("ROLLBACK;")
         f.abort(500, description="Internal Server Error")
+    print(f"Database initialized successfully took {pc() - start_all:.2f} seconds.")
     return "Database initialized successfully.", 200

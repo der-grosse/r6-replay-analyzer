@@ -23,12 +23,14 @@ def initialize_db():
         execute_query("ROLLBACK;")
         f.abort(500, description="Internal Server Error")
     
-    # Add unique constraint for Player table
-    query_player_constraint = """ALTER TABLE Player 
-                                ADD CONSTRAINT IF NOT EXISTS unique_player_combination 
-                                UNIQUE (ubisoft_id, username, team_id);"""
+    # Add unique constraint for Player table (ignore error if exists)
+    query_player_constraint = """
+        ALTER TABLE Player 
+        ADD CONSTRAINT unique_player_combination 
+        UNIQUE (ubisoft_id, username, team_id);
+    """
     success, error = execute_query(query_player_constraint)
-    if error:
+    if error and "already exists" not in str(error):
         logging.error(f"Database error during initialization [ADD CONSTRAINT Player]: {error}")
         execute_query("ROLLBACK;")
         f.abort(500, description="Internal Server Error")
@@ -152,7 +154,8 @@ def initialize_db():
                             time_elapsed_seconds INTEGER,
                             operator VARCHAR(255),
                             refrag BOOLEAN,
-                            got_refragt BOOLEAN,
+                            got_refraged BOOLEAN,
+                            headshot BOOLEAN,
                             FOREIGN KEY (round_id) REFERENCES Rounds(id),
                             FOREIGN KEY (player_id) REFERENCES Player(id),
                             FOREIGN KEY (target_player_id) REFERENCES Player(id)

@@ -251,7 +251,7 @@ def extract_player_rounds_data(data: dict, events_data: list) -> list[dict]:
                             REFRAGS += 1
                     elif event["target_player_ubisoft_id"] == PLAYERUBISOFTID:
                         DEATH = True
-                        if event["was_refragt"]:
+                        if event["was_refraged"]:
                             GOTREFRAGED = True
                 
                 elif event["type"] == "Death":
@@ -292,13 +292,14 @@ def extract_player_rounds_data(data: dict, events_data: list) -> list[dict]:
                 "od": OD,
                 "refrags": REFRAGS,
                 "got_refraged": GOTREFRAGED,
-                "kost": KOST
+                "kost": KOST,
+                "team_index": TEAMINDEX
             }
         player_rounds_list.append(round_dict)
     return player_rounds_list
 
 def extract_player_match_data(data: dict, player_rounds_data: list, 
-                              match_data: dict, player_data: dict) -> list[dict]:
+                              match_data: dict, player_data: dict) -> dict:
     player_match_data = {}
     MATCHID = data["Match_Info"]["Match ID"]
     for round_data in player_rounds_data:
@@ -434,7 +435,7 @@ def extract_events_data(data: dict, player_data: dict) -> list[dict]:
                                 time_diff = TIMEELAPSEDSECONDS - past_event_time
                                 if time_diff <= REFRAGTIME and time_diff >= 0:
                                     REFRAG = True
-                                    events[events.index(earlier_event)]["was_refragt"] = True
+                                    events[events.index(earlier_event)]["was_refraged"] = True
                                     break
                                 elif time_diff < 0:
                                     # Events are out of order, stop looking
@@ -446,7 +447,7 @@ def extract_events_data(data: dict, player_data: dict) -> list[dict]:
                                     time_diff = (round_duration - past_event_time) + TIMEELAPSEDSECONDS
                                     if time_diff <= REFRAGTIME:
                                         REFRAG = True
-                                        events[events.index(earlier_event)]["was_refragt"] = True
+                                        events[events.index(earlier_event)]["was_refraged"] = True
                                         break
                             # If we've gone too far back in time, stop searching
                             elif earlier_event["phase"] != event["phase"]:
@@ -461,7 +462,7 @@ def extract_events_data(data: dict, player_data: dict) -> list[dict]:
                            "time_elapsed_seconds": TIMEELAPSEDSECONDS,
                            "refrag": REFRAG,
                            "operator": OPERATOR,
-                           "was_refragt": False,
+                           "was_refraged": False,
                            "headshot": HEADSHOT
                            })
             
@@ -479,7 +480,8 @@ if __name__ == "__main__":
     start = pc()
     r_counter = 0
     extracted_data = extract_data(data)
-    print(extracted_data["player_data"]["9cbd6613-37c0-486b-ba51-d7a01b3ebafb"])
+    print(type(extracted_data["player_match_data"]))
+    #print(extracted_data["player_data"]["9cbd6613-37c0-486b-ba51-d7a01b3ebafb"])
     # for i, round in enumerate(extracted_data["player_rounds_data"]):
     #     print(f"Round {i + 1}/{round[list(round.keys())[0]]['round']}:")
     #     for player, value in round.items():
