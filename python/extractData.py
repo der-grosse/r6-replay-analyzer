@@ -13,7 +13,7 @@ def correct_data(data: dict) -> dict:
     # Check if last round(s) are valid
     keep_index = len(data["rounds"])
     for i, round in enumerate(reversed(data["rounds"])):
-        if len(round["stats"]) < 1:
+        if len(round["stats"]) < 7:
             keep_index -= 1
         else:
             break
@@ -76,7 +76,10 @@ def extract_match_data(data: dict) -> dict:
             "game_version": GAMEVERSION, 
             "team_id": None, 
             "winner_team_index": WINNER_TEAM_INDEX,
-            "team0_starting_side": TEAM0STARTINGSIDE
+            "team0_starting_side": TEAM0STARTINGSIDE,
+            "prep_duration": prep_duration,
+            "round_duration": round_duration,
+            "plant_duration": plant_duration
             }
 
 def extract_player_data(data: dict) -> dict:
@@ -224,7 +227,7 @@ def extract_player_rounds_data(data: dict, events_data: list) -> list[dict]:
             OK = False
             OD = False
             REFRAGS = 0
-            GOTREFRAGT = False
+            GOTREFRAGED = False
             for event in events_data:
                 if event["round_number"] != ROUNDNUMBER:
                     continue
@@ -251,7 +254,7 @@ def extract_player_rounds_data(data: dict, events_data: list) -> list[dict]:
                     elif event["target_player_ubisoft_id"] == PLAYERUBISOFTID:
                         DEATH = True
                         if event["was_refragt"]:
-                            GOTREFRAGT = True
+                            GOTREFRAGED = True
                 
                 elif event["type"] == "Death":
                     team0_player_count.remove(event["player_ubisoft_id"]) if event["player_ubisoft_id"] in team0_player_count else None
@@ -272,7 +275,7 @@ def extract_player_rounds_data(data: dict, events_data: list) -> list[dict]:
                 KOST = True
             elif WIN and not DEATH:
                 KOST = True
-            elif DEATH and GOTREFRAGT:
+            elif DEATH and GOTREFRAGED:
                 KOST = True
             
             round_dict[PLAYERUBISOFTID] = {
@@ -290,7 +293,7 @@ def extract_player_rounds_data(data: dict, events_data: list) -> list[dict]:
                 "ok": OK,
                 "od": OD,
                 "refrags": REFRAGS,
-                "got_refragt": GOTREFRAGT,
+                "got_refraged": GOTREFRAGED,
                 "kost": KOST
             }
         player_rounds_list.append(round_dict)
@@ -329,13 +332,19 @@ def extract_player_match_data(data: dict, player_rounds_data: list,
                     "oks":0,
                     "oks_atk":0,
                     "ods":0,
-                    "ods_atk":0
+                    "ods_atk":0,
+                    "refrags":0,
+                    "got_refraged":0
                 }
             player_match_data[PLAYERID]["rounds_played"] += 1
             player_match_data[PLAYERID]["kills"] += stats["kills"]
             player_match_data[PLAYERID]["deaths"] += 1 if stats["death"] else 0
             player_match_data[PLAYERID]["headshots"] += stats["headshots"]
             player_match_data[PLAYERID]["kost"] += 1 if stats["kost"] else 0
+            player_match_data[PLAYERID]["oks"] += 1 if stats["ok"] else 0
+            player_match_data[PLAYERID]["ods"] += 1 if stats["od"] else 0
+            player_match_data[PLAYERID]["refrags"] += stats["refrags"]
+            player_match_data[PLAYERID]["got_refraged"] += 1 if stats["got_refraged"] else 0
             if stats["win"]:
                 player_match_data[PLAYERID]["won_rounds"] += 1
                 if stats["atk"]:
@@ -351,17 +360,17 @@ def extract_player_match_data(data: dict, player_rounds_data: list,
             if stats["atk"]:
                 player_match_data[PLAYERID]["oks_atk"] += 1 if stats["ok"] else 0
                 player_match_data[PLAYERID]["ods_atk"] += 1 if stats["od"] else 0
-            player_match_data[PLAYERID]["oks"] += 1 if stats["ok"] else 0
-            player_match_data[PLAYERID]["ods"] += 1 if stats["od"] else 0
+            
         
-        for PLAYERID, stats in player_match_data.items():
-            player_match_data[PLAYERID]["kost"] = stats["kost"] / stats["rounds_played"] if stats["rounds_played"] > 0 else 0
-            username = player_data[PLAYERID]["username"] if PLAYERID in player_data else None
-            player_match_data[PLAYERID]["username"] = username #del
-            if [player["rounds"] for player in data["stats"] if player["username"] == username][0] == stats["rounds_played"]:
-                ASSISTS = [player["assists"] for player in data["stats"] if player["username"] == username][0]
-            else:
-                ASSISTS = None
+    for PLAYERID, stats in player_match_data.items():
+        player_match_data[PLAYERID]["kost"] = round(stats["kost"] / stats["rounds_played"], 2) if stats["rounds_played"] > 0 else 0
+        username = player_data[PLAYERID]["username"] if PLAYERID in player_data else None
+        player_match_data[PLAYERID]["username"] = username
+        if [player["rounds"] for player in data["stats"] if player["username"] == username][0] == stats["rounds_played"]:
+            print("true")
+            player_match_data[PLAYERID]["assists"] = [player["assists"] for player in data["stats"] if player["username"] == username][0]
+        else:
+            player_match_data[PLAYERID]["assists"] = None
     return player_match_data
 
 def extract_events_data(data: dict, player_data: dict) -> list[dict]:
@@ -466,7 +475,7 @@ if __name__ == "__main__":
     from time import perf_counter as pc
     from pathlib import Path
 
-    match_name = "Match-2025-08-29_22-44-56-17324"
+    match_name = "Match-2025-08-29_20-09-18-17324"
     with open(Path(__file__).parent.parent / "data" / "json" / f"{match_name}.json", "r") as f:
         data = load(f)
     
@@ -474,9 +483,8 @@ if __name__ == "__main__":
     r_counter = 0
     extracted_data = extract_data(data)
     for key, value in extracted_data["player_match_data"].items():
-        value.pop("match_id")
-        value.pop("player_id")
-        print(f"Player: {value['username']}\n  {value}\n\n")
+
+        print(f"Player: {value['username']}\n  Kost: {value['kost']} - OKS: {value['oks']} - ODS: {value['ods']} - Refrags: {value['refrags']} - Got Refragged: {value['got_refraged']}\n")
     # for i, round in enumerate(extracted_data["player_rounds_data"]):
     #     print(f"Round {i + 1}/{round[list(round.keys())[0]]['round']}:")
     #     for player, value in round.items():

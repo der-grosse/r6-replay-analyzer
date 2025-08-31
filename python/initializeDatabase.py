@@ -35,6 +35,9 @@ def initialize_db():
                              team_id INTEGER,
                              winner_team_index INTEGER,
                              team0_starting_side VARCHAR(255),
+                             prep_duration INTEGER,
+                             round_duration INTEGER,
+                             plant_duration INTEGER,
                              FOREIGN KEY (player_id) REFERENCES Player(id)
                         );"""
     success, error = execute_query(query_matches_table)
@@ -117,6 +120,8 @@ def initialize_db():
                                   oks_atk INTEGER,
                                   ods INTEGER,
                                   ods_atk INTEGER,
+                                  refrags INTEGER,
+                                  got_refraged INTEGER,
                                   FOREIGN KEY (player_id) REFERENCES Player(id),
                                   FOREIGN KEY (match_id) REFERENCES Matches(match_id)
                               );"""
