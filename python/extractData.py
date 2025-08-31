@@ -10,8 +10,6 @@ round_duration = 180
 plant_duration = 45
 
 def correct_data(data: dict) -> dict:
-    #remove key "stats"
-    data.pop("stats", None)
     # Check if last round(s) are valid
     keep_index = len(data["rounds"])
     for i, round in enumerate(reversed(data["rounds"])):
@@ -40,10 +38,10 @@ def extract_data(data: dict) -> dict["match_data": dict, "player_data": dict,
     data = correct_data(data)
     match_data = extract_match_data(data)
     player_data = extract_player_data(data)
-    player_match_data = extract_player_match_data(data)
     events_data = extract_events_data(data, player_data)
     rounds_data = extract_rounds_data(data, events_data)
-    player_rounds_data = extract_player_rounds_data(data, events_data, player_data)
+    player_rounds_data = extract_player_rounds_data(data, events_data)
+    player_match_data = extract_player_match_data(data, player_rounds_data, match_data, player_data)
     return {"match_data": match_data, "player_data": player_data, "rounds_data": rounds_data, "player_rounds_data": player_rounds_data, "player_match_data": player_match_data, "events_data": events_data}
 
 def extract_match_data(data: dict) -> dict:
@@ -186,10 +184,9 @@ def extract_rounds_data(data: dict, events_data: dict) -> list[dict]:
                             "clutch":CLUTCH,
                             "win_condition":WINCONDITION,
                             })
-    print(rounds_data)
     return rounds_data
 
-def extract_player_rounds_data(data: dict, events_data: list, player_data: dict) -> list[dict]:
+def extract_player_rounds_data(data: dict, events_data: list) -> list[dict]:
     player_rounds_list = []
     for i, round in enumerate(data["rounds"]):
         round_dict = {}
@@ -269,6 +266,15 @@ def extract_player_rounds_data(data: dict, events_data: list, player_data: dict)
                     PLANT = True
                 if event["type"] == "DefuserDisableComplete" and event["player_ubisoft_id"] == PLAYERUBISOFTID:
                     DEFUSE = True
+            #kost
+            KOST = False
+            if KILLS >= 1:
+                KOST = True
+            elif WIN and not DEATH:
+                KOST = True
+            elif DEATH and GOTREFRAGT:
+                KOST = True
+            
             round_dict[PLAYERUBISOFTID] = {
                 "round": ROUNDNUMBER,
                 "operator": OPERATOR,
@@ -285,16 +291,81 @@ def extract_player_rounds_data(data: dict, events_data: list, player_data: dict)
                 "od": OD,
                 "refrags": REFRAGS,
                 "got_refragt": GOTREFRAGT,
+                "kost": KOST
             }
         player_rounds_list.append(round_dict)
     return player_rounds_list
 
-def extract_player_match_data(data: dict) -> list[dict]:
-    pass
+def extract_player_match_data(data: dict, player_rounds_data: list, 
+                              match_data: dict, player_data: dict) -> list[dict]:
+    player_match_data = {}
+    MATCHID = data["Match_Info"]["Match ID"]
+    for round_data in player_rounds_data:
+        for i, (PLAYERID, stats) in enumerate(round_data.items()):
+            if PLAYERID not in player_match_data:
+                TEAMINDEX = [player["teamIndex"] for player in data["rounds"][stats["round"]-1]["players"] if player["profileID"] == PLAYERID][0]
+                if match_data["winner_team_index"] is None:
+                    WINMATCH = None
+                elif match_data["winner_team_index"] == TEAMINDEX:
+                    WINMATCH = True
+                else:
+                    WINMATCH = False
+                player_match_data[PLAYERID] = {
+                    "match_id": MATCHID,
+                    "player_id": PLAYERID,
+                    "rounds_played": 0,
+                    "team_index": TEAMINDEX,
+                    "kills": 0,
+                    "deaths": 0,
+                    "headshots": 0,
+                    "kost": 0,
+                    "win_match": WINMATCH,
+                    "won_rounds": 0,
+                    "lost_rounds": 0,
+                    "atk_won_rounds": 0,
+                    "atk_lost_rounds":0,
+                    "def_won_rounds":0,
+                    "def_lost_rounds":0,
+                    "oks":0,
+                    "oks_atk":0,
+                    "ods":0,
+                    "ods_atk":0
+                }
+            player_match_data[PLAYERID]["rounds_played"] += 1
+            player_match_data[PLAYERID]["kills"] += stats["kills"]
+            player_match_data[PLAYERID]["deaths"] += 1 if stats["death"] else 0
+            player_match_data[PLAYERID]["headshots"] += stats["headshots"]
+            player_match_data[PLAYERID]["kost"] += 1 if stats["kost"] else 0
+            if stats["win"]:
+                player_match_data[PLAYERID]["won_rounds"] += 1
+                if stats["atk"]:
+                    player_match_data[PLAYERID]["atk_won_rounds"] += 1
+                else:
+                    player_match_data[PLAYERID]["def_won_rounds"] += 1
+            else:
+                player_match_data[PLAYERID]["lost_rounds"] += 1
+                if stats["atk"]:
+                    player_match_data[PLAYERID]["atk_lost_rounds"] += 1
+                else:
+                    player_match_data[PLAYERID]["def_lost_rounds"] += 1
+            if stats["atk"]:
+                player_match_data[PLAYERID]["oks_atk"] += 1 if stats["ok"] else 0
+                player_match_data[PLAYERID]["ods_atk"] += 1 if stats["od"] else 0
+            player_match_data[PLAYERID]["oks"] += 1 if stats["ok"] else 0
+            player_match_data[PLAYERID]["ods"] += 1 if stats["od"] else 0
+        
+        for PLAYERID, stats in player_match_data.items():
+            player_match_data[PLAYERID]["kost"] = stats["kost"] / stats["rounds_played"] if stats["rounds_played"] > 0 else 0
+            username = player_data[PLAYERID]["username"] if PLAYERID in player_data else None
+            player_match_data[PLAYERID]["username"] = username #del
+            if [player["rounds"] for player in data["stats"] if player["username"] == username][0] == stats["rounds_played"]:
+                ASSISTS = [player["assists"] for player in data["stats"] if player["username"] == username][0]
+            else:
+                ASSISTS = None
+    return player_match_data
 
 def extract_events_data(data: dict, player_data: dict) -> list[dict]:
     events = []
-    counter = 0
     for i, round in enumerate(data["rounds"]):
         ROUNDNUMBER = i + 1
         # Give each event a phase
@@ -388,7 +459,6 @@ def extract_events_data(data: dict, player_data: dict) -> list[dict]:
                            "headshot": HEADSHOT
                            })
             
-    print(f"Total refrags found: {counter}")
     return events
 
 if __name__ == "__main__":
@@ -403,11 +473,15 @@ if __name__ == "__main__":
     start = pc()
     r_counter = 0
     extracted_data = extract_data(data)
-    for i, round in enumerate(extracted_data["player_rounds_data"]):
-        print(f"Round {i + 1}/{round[list(round.keys())[0]]['round']}:")
-        for player, value in round.items():
-            print(f" Player: {player}\n  {value}")
-        print("\n")
+    for key, value in extracted_data["player_match_data"].items():
+        value.pop("match_id")
+        value.pop("player_id")
+        print(f"Player: {value['username']}\n  {value}\n\n")
+    # for i, round in enumerate(extracted_data["player_rounds_data"]):
+    #     print(f"Round {i + 1}/{round[list(round.keys())[0]]['round']}:")
+    #     for player, value in round.items():
+    #         print(f" Player: {player}\n  {value}")
+    #     print("\n")
     # print(f"Extraction took {pc() - start:.2f} seconds")
     # for key, value in extracted_data.items():
     #     print(f"{key}: {type(value)} with {len(value.items()) if isinstance(value, dict) else '1'} entries")

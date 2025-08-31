@@ -114,7 +114,9 @@ def initialize_db():
                                   won_def_rounds INTEGER,
                                   lost_def_rounds INTEGER,
                                   oks INTEGER,
+                                  oks_atk INTEGER,
                                   ods INTEGER,
+                                  ods_atk INTEGER,
                                   FOREIGN KEY (player_id) REFERENCES Player(id),
                                   FOREIGN KEY (match_id) REFERENCES Matches(match_id)
                               );"""
