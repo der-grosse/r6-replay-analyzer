@@ -22,6 +22,16 @@ def initialize_db():
         logging.error(f"Database error during initialization [CREATE TABLE Player]: {error}")
         execute_query("ROLLBACK;")
         f.abort(500, description="Internal Server Error")
+    
+    # Add unique constraint for Player table
+    query_player_constraint = """ALTER TABLE Player 
+                                ADD CONSTRAINT IF NOT EXISTS unique_player_combination 
+                                UNIQUE (ubisoft_id, username, team_id);"""
+    success, error = execute_query(query_player_constraint)
+    if error:
+        logging.error(f"Database error during initialization [ADD CONSTRAINT Player]: {error}")
+        execute_query("ROLLBACK;")
+        f.abort(500, description="Internal Server Error")
 
     # Create table Matches
     query_matches_table = """CREATE TABLE IF NOT EXISTS Matches (

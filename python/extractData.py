@@ -1,6 +1,3 @@
-from math import e
-from tkinter import ROUND
-from pyparsing import C
 from mapFunctions import map_maps
 
 global REFRAGTIME, prep_duration, round_duration, plant_duration
@@ -42,7 +39,9 @@ def extract_data(data: dict) -> dict["match_data": dict, "player_data": dict,
     rounds_data = extract_rounds_data(data, events_data)
     player_rounds_data = extract_player_rounds_data(data, events_data)
     player_match_data = extract_player_match_data(data, player_rounds_data, match_data, player_data)
-    return {"match_data": match_data, "player_data": player_data, "rounds_data": rounds_data, "player_rounds_data": player_rounds_data, "player_match_data": player_match_data, "events_data": events_data}
+    return {"match_data": match_data, "player_data": player_data, 
+            "rounds_data": rounds_data, "player_rounds_data": player_rounds_data, 
+            "player_match_data": player_match_data, "events_data": events_data}
 
 def extract_match_data(data: dict) -> dict:
     match_info = data["Match_Info"]
@@ -92,11 +91,10 @@ def extract_player_data(data: dict) -> dict:
                 continue
             else:
                 USERNAME = player["username"]
-                TEAMID = None
                 player_dict[UBISOFTID] = {"ubisoft_id": UBISOFTID, 
                                           "username": USERNAME, 
-                                          "timestamp": TIMESTAMP, 
-                                          "team_id": TEAMID}
+                                          "timestamp": TIMESTAMP
+                                          }
         if len(player_dict) == 10:
             break
     return player_dict
@@ -367,7 +365,6 @@ def extract_player_match_data(data: dict, player_rounds_data: list,
         username = player_data[PLAYERID]["username"] if PLAYERID in player_data else None
         player_match_data[PLAYERID]["username"] = username
         if [player["rounds"] for player in data["stats"] if player["username"] == username][0] == stats["rounds_played"]:
-            print("true")
             player_match_data[PLAYERID]["assists"] = [player["assists"] for player in data["stats"] if player["username"] == username][0]
         else:
             player_match_data[PLAYERID]["assists"] = None
@@ -475,16 +472,14 @@ if __name__ == "__main__":
     from time import perf_counter as pc
     from pathlib import Path
 
-    match_name = "Match-2025-08-29_20-09-18-17324"
+    match_name = "Match-2025-08-29_21-02-41-17324"
     with open(Path(__file__).parent.parent / "data" / "json" / f"{match_name}.json", "r") as f:
         data = load(f)
     
     start = pc()
     r_counter = 0
     extracted_data = extract_data(data)
-    for key, value in extracted_data["player_match_data"].items():
-
-        print(f"Player: {value['username']}\n  Kost: {value['kost']} - OKS: {value['oks']} - ODS: {value['ods']} - Refrags: {value['refrags']} - Got Refragged: {value['got_refraged']}\n")
+    print(extracted_data["player_data"]["9cbd6613-37c0-486b-ba51-d7a01b3ebafb"])
     # for i, round in enumerate(extracted_data["player_rounds_data"]):
     #     print(f"Round {i + 1}/{round[list(round.keys())[0]]['round']}:")
     #     for player, value in round.items():

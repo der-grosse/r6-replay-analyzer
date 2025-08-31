@@ -3,10 +3,11 @@ import logging
 import flask as f
 from datetime import datetime as dt
 from flask_cors import CORS
+from numpy import save
 
 from vars import BASE_PATH, MODE, PORT
 from auth import get_auth
-from db_functions import fetch_data, execute_query
+from db_functions import fetch_data, execute_query, save_match
 from initializeDatabase import initialize_db
 
 print("Starting R6 Replay Analyzer API")
@@ -46,6 +47,17 @@ def initialize():
 def upload_replays():
     # TODO: implement
     return "Not implemented", 501
+
+@app.route(f'{BASE_PATH}/upload_json', methods=['POST'])
+def upload_json():
+    data = f.request.get_json()
+    if not data:
+        f.abort(400, description="Bad Request: No JSON data provided")
+
+    # Process the JSON data
+    save_match(data, f.g.user['teamID'])
+
+    return "JSON data processed successfully", 200
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG if MODE == "development" else logging.INFO)
