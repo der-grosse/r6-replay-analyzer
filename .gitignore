@@ -212,3 +212,4 @@ data
 local_test
 ~$*.xlsx
 ~$*.xls
+temp*.*
