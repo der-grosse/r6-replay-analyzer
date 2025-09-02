@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 import re
 
-r6_dissect_path = Path(__file__).parent.parent / "parser" / "r6-dissect.exe"
+r6_dissect_path = Path(__file__).parent.parent / "parser_win" / "r6-dissect.exe"
 
 def parseRound(input_path):
     """Gibt JSON direkt zur Konsole aus (wie r6-dissect ohne -o Parameter)"""

@@ -204,7 +204,7 @@ def save_match(data: dict, team_id: int) -> None:
                 dic.get("headshots"),
                 dic.get("plant"),
                 dic.get("defuse"),
-                dic.get("kostpoint"),
+                dic.get("kost"),
                 dic.get("onevx"),
                 dic.get("ok"),
                 dic.get("od"),
