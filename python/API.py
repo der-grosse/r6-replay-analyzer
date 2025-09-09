@@ -3,7 +3,6 @@ import logging
 import flask as f
 from datetime import datetime as dt
 from flask_cors import CORS
-from numpy import save
 
 from vars import BASE_PATH, MODE, PORT
 from auth import get_auth
@@ -58,6 +57,31 @@ def upload_json():
     save_match(data, f.g.user['teamID'])
 
     return "JSON data processed successfully", 200
+
+@app.route(f'{BASE_PATH}/get_all_player', methods=['GET'])
+def get_all_player() -> dict[list[dict[str, str]]]:
+    """
+    Gibt alle Spielernamen und Ubisoft IDs zurück, sortiert nach Spielernamen.
+    Es wird immer der aktuellste Name zurückgegeben, auch wenn sich der Name geändert hat.
+    """
+
+    query = """SELECT p.username as username, p.ubisoft_id as uid
+            FROM player p
+                INNER JOIN (
+                    SELECT ubisoft_id, MAX(timestamp) as max_timestamp
+                    FROM player
+                    GROUP BY
+                        ubisoft_id
+                ) sub ON p.ubisoft_id = sub.ubisoft_id
+                AND p.timestamp = sub.max_timestamp
+            ORDER BY p.username;"""
+    data, error = fetch_data(query, ["username","uid"])
+
+    if error:
+        print("ERROR")
+        f.abort(500, description="Internal Server Error")
+
+    return {"players": data}, 200
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG if MODE == "development" else logging.INFO)
