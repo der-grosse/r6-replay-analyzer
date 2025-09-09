@@ -1,9 +1,9 @@
 ##### Datenbank-Abfragen
 from time import perf_counter as pc
-from numpy import rec
+
 import psycopg2
-from requests import get
-from vars import DB_LOGIN, PORT, BASE_PATH
+
+from vars import DB_LOGIN
 import logging
 import flask as f
 
@@ -191,7 +191,7 @@ def save_match(data: dict, team_id: int) -> None:
             RETURNING id;
             """
 
-            round_number = round_data.get("round_number")
+            round_number = dic.get("round")
             roundID = rounds_data[round_number - 1]["round.id"]
             params = (
                 data["player_data"][ubisoft_id]["player.id"],
