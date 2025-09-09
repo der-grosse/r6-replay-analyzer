@@ -1,13 +1,11 @@
 ##### Datenbank-Abfragen
-from time import perf_counter as pc
-
 import psycopg2
 
 from vars import DB_LOGIN
 import logging
 import flask as f
 
-def fetch_data(query, columns, params=None):
+def fetch_data(query: str, columns: list[str], params: tuple = None) -> tuple[list[dict] | None, None | str]:
     """Führt eine SQL-Abfrage aus und gibt die Ergebnisse zurück."""
     try:
         with psycopg2.connect(DB_LOGIN) as con:
@@ -18,8 +16,8 @@ def fetch_data(query, columns, params=None):
             return result, None
     except Exception as e:
         return None, str(e)
-    
-def execute_query(query, params=None):
+
+def execute_query(query: str, params: tuple = None) -> tuple[bool, str | None]:
     """Führt SQL-Befehle aus, die keine Ergebnisse zurückgeben (CREATE, INSERT, UPDATE, DELETE)"""
     try:
         with psycopg2.connect(DB_LOGIN) as con:
@@ -29,10 +27,17 @@ def execute_query(query, params=None):
             return True, None
     except Exception as e:
         return False, str(e)
+
+def save_match(data: dict, team_id: int) -> tuple[str | None, None | int]:
+    """Speichert alle Daten eines Matches in der Datenbank.
+    Args:
+        data (dict): Ein Dictionary mit allen Match-Daten. Siehe extractData.py für das Format.
+        team_id (int): Die ID des Teams, dem das Match zugeordnet werden soll.
     
-def save_match(data: dict, team_id: int) -> None:
-    start_all = pc()
-    start = pc()
+    Returns:
+        tuple[str | None, None | int]: Eine Erfolgsmeldung und der HTTP-Statuscode oder None und ein Fehlercode.
+    """
+
     success, error = execute_query("BEGIN TRANSACTION;")
     if error:
         logging.error(f"Database error during initialization [BEGIN TRANSACTION]: {error}")
@@ -55,11 +60,9 @@ def save_match(data: dict, team_id: int) -> None:
     else:  # Wenn Liste leer ist (Match existiert nicht)
         logging.info(f"Match {match_id} does not exist yet.")
         execute_query("ROLLBACK;")
-    print(f"Check if match exists took {pc() - start:.2f} seconds.")
     # endregion
 
     # region Save Player
-    start = pc()
     for ubisoft_id, player_data in data["player_data"].items():
         query = """
             INSERT INTO player (ubisoft_id, username, timestamp, team_id)
@@ -94,11 +97,9 @@ def save_match(data: dict, team_id: int) -> None:
             f.abort(500, description="Internal Server Error")
         else:
             data["player_data"][ubisoft_id]["player.id"] = player_id
-    print(f"Save Player took {pc() - start:.2f} seconds.")
     # endregion
 
     # region Save Match
-    start = pc()
     match_info = data["match_data"]
     query = """
     INSERT INTO matches (match_id, player_id, timestamp, game_mode, map, match_type,
@@ -136,11 +137,9 @@ def save_match(data: dict, team_id: int) -> None:
 
     else:
         match_id = result[0]['match_id']
-    print(f"Save Match took {pc() - start:.2f} seconds.")
     # endregion
     
     # region Save rounds
-    start = pc()
     rounds_data = data["rounds_data"]
     for i, round_data in enumerate(rounds_data):
         query = """INSERT INTO rounds (match_id, round_number, site, winner_team_index, time_to_entry,
@@ -176,11 +175,9 @@ def save_match(data: dict, team_id: int) -> None:
             f.abort(500, description="Internal Server Error")
 
         rounds_data[i]["round.id"] = round_id
-    print(f"Save rounds took {pc() - start:.2f} seconds.")
     # endregion
 
     # region Save playerRound
-    start = pc()
     player_round_data = data["player_rounds_data"]
     for round_dict in player_round_data:
         for ubisoft_id, dic in round_dict.items():
@@ -225,11 +222,9 @@ def save_match(data: dict, team_id: int) -> None:
                 logging.error(f"Failed to retrieve playerRound ID after insert/update for round ID {roundID}")
                 execute_query("ROLLBACK;")
                 f.abort(500, description="Internal Server Error")
-    print(f"Save playerRound took {pc() - start:.2f} seconds.")
     # endregion
 
     # region Save playerMatch
-    start = pc()
     player_match_data = data["player_match_data"]
     for ubisoft_id, dic in player_match_data.items():
         query = """
@@ -275,11 +270,9 @@ def save_match(data: dict, team_id: int) -> None:
             logging.error(f"Failed to retrieve playerMatch ID after insert/update for player ID {ubisoft_id}")
             execute_query("ROLLBACK;")
             f.abort(500, description="Internal Server Error")
-    print(f"Save playerMatch took {pc() - start:.2f} seconds.")
     # endregion
 
     # region Save Events
-    start = pc()
     for event in data["events_data"]:
         query = """
         INSERT INTO events (round_id, player_id, target_player_id, type, phase, time_elapsed_seconds,
@@ -316,7 +309,6 @@ def save_match(data: dict, team_id: int) -> None:
             logging.error(f"Failed to retrieve event ID after insert/update for round ID {roundID}")
             execute_query("ROLLBACK;")
             f.abort(500, description="Internal Server Error")
-    print(f"Save Events took {pc() - start:.2f} seconds.")
     # endregion
 
     # Commit if successful
@@ -325,5 +317,4 @@ def save_match(data: dict, team_id: int) -> None:
         logging.error(f"Database error during initialization [COMMIT]: {error}")
         execute_query("ROLLBACK;")
         f.abort(500, description="Internal Server Error")
-    print(f"Database initialized successfully took {pc() - start_all:.2f} seconds.")
     return "Database initialized successfully.", 200
